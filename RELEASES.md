@@ -185,5 +185,35 @@ Order: identity (3 models) ✅ → notification (2) → workspace (12) → IAM (
 core-api (77) last, because it is the largest and has the most legacy columns
 that alter-sync may already have dropped.
 
-> `src/db/migrator.js` and `scripts/migrate.js` are copied, not shared — these
-> repos have no common package. Keep them in step or extract them into one.
+### Keeping the copied files in step
+
+`dbPreflight.js`, `migrator.js`, `migrate.js`, `ensureDatabase.js` and
+`apiVersions.js` are **copied** into each service, not shared.
+
+Extracting them into an `@cocarr/service-kit` package was the first instinct and
+is the textbook answer, but it is the wrong trade here: a private cross-repo
+dependency means every service's `npm ci` needs GitHub credentials at build
+time, and the Railway builds run without them. That adds a new build-failure
+mode to five services in order to deduplicate five small files — and every fix
+to the kit would then need a version bump landed in five repos before it took
+effect anywhere.
+
+The real risk was never the duplication. It is **drift**: five copies that are
+identical today and quietly stop being identical the first time somebody fixes a
+bug in one of them. So:
+
+```bash
+node cocarr-docs/scripts/checkSharedFiles.js          # report drift
+node cocarr-docs/scripts/checkSharedFiles.js --fix    # copy the reference over the rest
+```
+
+It runs across the side-by-side checkout every developer here already has, costs
+nothing at build time, and normalises the lines that are *supposed* to differ per
+service (the service name, the Railway service, and each service's own schema-step
+hint) so it does not report noise forever.
+
+`cocarr-identity-service` is the reference copy — it is where each of these was
+written and verified first.
+
+Delete this script the day a package registry exists and the kit becomes worth
+its cost.
